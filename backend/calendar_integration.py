@@ -1,22 +1,3 @@
-"""
-Google Calendar Integration — real OAuth2 flow + automatic Google Meet
-link generation, as explicitly required by the assignment ("Real Google
-Calendar integration is required").
-
-Flow:
-  1. Recruiter visits /api/google/auth-url, logs into Google, grants access
-  2. Google redirects to /api/google/oauth2callback?code=...
-  3. We exchange the code for tokens and store them (DB, for simplicity)
-  4. schedule_interview_for_candidate() then creates real Calendar events
-     with conferenceData set to auto-generate a Meet link, and invites
-     the candidate as an attendee (they get a real Google Calendar invite).
-
-Requires a Google Cloud project with the Calendar API enabled and OAuth
-2.0 Client ID credentials (Web application type). See setup steps provided
-separately — this code assumes:
-  GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI env vars
-"""
-
 import os
 import json
 import uuid
@@ -73,7 +54,33 @@ def handle_oauth_callback(code: str):
     print("REFRESH TOKEN:", creds.refresh_token)
     print("CLIENT ID:", creds.client_id)
 
-    ...
+    if not creds.refresh_token:
+        # Google only sends a refresh_token on the first consent. If the user
+        # already granted access before, Google omits it on re-auth, which
+        # silently breaks scheduling later. Force re-consent in that case.
+        raise Exception(
+            "No refresh_token returned by Google. Revoke prior access at "
+            "https://myaccount.google.com/permissions and try connecting again."
+        )
+
+    token_data = {
+        "token": creds.token,
+        "refresh_token": creds.refresh_token,
+        "token_uri": creds.token_uri,
+        "client_id": creds.client_id,
+        "client_secret": creds.client_secret,
+        "scopes": creds.scopes,
+    }
+
+    conn = get_conn()
+    conn.execute("DELETE FROM google_tokens")  # keep just the latest token
+    conn.execute(
+        "INSERT INTO google_tokens (token_json) VALUES (?)",
+        (json.dumps(token_data),),
+    )
+    conn.commit()
+    conn.close()
+    print("TOKEN SAVED TO DB")
 
 
 def _get_credentials() -> Credentials | None:
