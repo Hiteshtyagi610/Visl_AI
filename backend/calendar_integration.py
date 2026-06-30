@@ -53,24 +53,27 @@ def get_auth_url() -> str:
 
 
 def handle_oauth_callback(code: str):
-    flow = Flow.from_client_config(CLIENT_CONFIG, scopes=SCOPES, redirect_uri=REDIRECT_URI)
-    flow.fetch_token(code=code)
+    print("========== HANDLE CALLBACK ==========")
+
+    flow = Flow.from_client_config(
+        CLIENT_CONFIG,
+        scopes=SCOPES,
+        redirect_uri=REDIRECT_URI
+    )
+
+    try:
+        flow.fetch_token(code=code)
+        print("TOKEN FETCHED")
+    except Exception as e:
+        print("FETCH TOKEN FAILED:", e)
+        raise
+
     creds = flow.credentials
 
-    token_data = {
-        "token": creds.token,
-        "refresh_token": creds.refresh_token,
-        "token_uri": creds.token_uri,
-        "client_id": creds.client_id,
-        "client_secret": creds.client_secret,
-        "scopes": creds.scopes,
-    }
+    print("REFRESH TOKEN:", creds.refresh_token)
+    print("CLIENT ID:", creds.client_id)
 
-    conn = get_conn()
-    conn.execute("DELETE FROM google_tokens")
-    conn.execute("INSERT INTO google_tokens (token_json) VALUES (?)", (json.dumps(token_data),))
-    conn.commit()
-    conn.close()
+    ...
 
 
 def _get_credentials() -> Credentials | None:
