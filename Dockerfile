@@ -12,6 +12,8 @@ RUN pip install --upgrade pip && \
 COPY backend/ .
 COPY frontend/ ../frontend/
 
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+
 RUN mkdir -p uploads/resumes
 
 EXPOSE 8000
