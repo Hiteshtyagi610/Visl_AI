@@ -174,8 +174,16 @@ async def google_auth_url():
 
 @app.get("/api/google/oauth2callback")
 async def google_oauth_callback(code: str):
-    handle_oauth_callback(code)
-    return {"status": "connected"}
+    print("========== CALLBACK HIT ==========")
+    print("CODE RECEIVED:", code[:20])
+
+    try:
+        handle_oauth_callback(code)
+        print("TOKEN SAVED SUCCESSFULLY")
+        return {"status": "connected"}
+    except Exception as e:
+        print("CALLBACK FAILED:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/schedule-interviews")
