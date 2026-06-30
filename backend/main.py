@@ -48,12 +48,33 @@ init_db()
 @app.post("/api/upload-candidates")
 async def upload_candidates(file: UploadFile = File(...)):
     """Recruiter uploads a CSV of candidate info. Stored fresh each run."""
+
+    # Clear previous screening session
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    cur.execute("DELETE FROM candidates")
+
+    # Optional: reset auto-increment IDs
+    cur.execute("DELETE FROM sqlite_sequence WHERE name='candidates'")
+
+    conn.commit()
+    conn.close()
+
+    # Save uploaded CSV
     path = os.path.join(UPLOAD_DIR, "candidates.csv")
     os.makedirs(UPLOAD_DIR, exist_ok=True)
+
     with open(path, "wb") as f:
         shutil.copyfileobj(file.file, f)
+
+    # Import fresh candidates
     count = ingest_candidates_csv(path)
-    return {"status": "ok", "candidates_loaded": count}
+
+    return {
+        "status": "ok",
+        "candidates_loaded": count
+    }
 
 
 # ---------------------------------------------------------------------------
