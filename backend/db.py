@@ -15,6 +15,22 @@ def get_conn():
     conn = sqlite3.connect(DB_PATH)
     return conn
 
+def clear_session():
+    conn = get_conn()
+    c = conn.cursor()
+
+    # Clear previous screening data
+    c.execute("DELETE FROM candidates")
+    c.execute("DELETE FROM job_description")
+    c.execute("DELETE FROM interviews")
+
+    # Reset AUTOINCREMENT tables
+    c.execute("DELETE FROM sqlite_sequence WHERE name='job_description'")
+    c.execute("DELETE FROM sqlite_sequence WHERE name='interviews'")
+
+    conn.commit()
+    conn.close()
+
 
 def init_db():
     conn = get_conn()
