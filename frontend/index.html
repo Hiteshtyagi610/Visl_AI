@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="dark light" />
+<title>Visl Screen — Candidate Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0e1411;
+    --ink-soft: #161d19;
+    --paper: #fbfaf6;
+    --panel: #11181450;
+    --line: rgba(255,255,255,0.09);
+    --line-strong: rgba(255,255,255,0.16);
+    --signal: #5eead4;
+    --signal-deep: #2dd4a7;
+    --signal-dim: rgba(94,234,212,0.12);
+    --warn: #f0a868;
+    --warn-dim: rgba(240,168,104,0.14);
+    --text: #eef1ee;
+    --text-dim: #9aa39c;
+    --text-faint: #5c655e;
+    --mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+    --sans: 'Inter', -apple-system, sans-serif;
+    --display: 'Space Grotesk', var(--sans);
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-font-smoothing: antialiased; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(94,234,212,0.10), transparent 60%),
+      radial-gradient(ellipse 700px 400px at 100% 0%, rgba(240,168,104,0.06), transparent 55%),
+      var(--ink);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.55;
+    min-height: 100vh;
+  }
+
+  ::selection { background: var(--signal-dim); color: var(--signal); }
+
+  *:focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* ---------- Topbar ---------- */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(14,20,17,0.7);
+    backdrop-filter: blur(10px);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  .topbar .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--display);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--text);
+  }
+  .brand .mark {
+    width: 9px; height: 9px;
+    border-radius: 2px;
+    background: var(--signal);
+    box-shadow: 0 0 12px var(--signal);
+    flex-shrink: 0;
+  }
+  .brand .tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-faint);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border: 1px solid var(--line-strong);
+    padding: 2px 7px;
+    border-radius: 20px;
+    margin-left: 2px;
+  }
+  .topbar .stage-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--signal);
+    letter-spacing: 0.04em;
+    background: var(--signal-dim);
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid rgba(94,234,212,0.25);
+    white-space: nowrap;
+  }
+
+  /* ---------- Pipeline rail ---------- */
+  .pipeline {
+    display: flex;
+    overflow-x: auto;
+    gap: 2px;
+    padding: 0 28px;
+    background: var(--ink-soft);
+    border-bottom: 1px solid var(--line);
+    scrollbar-width: thin;
+  }
+  .pipeline::-webkit-scrollbar { height: 4px; }
+  .pipeline::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 4px; }
+
+  .stage {
+    flex: 0 0 auto;
+    padding: 13px 16px 11px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    color: var(--text-faint);
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: color 0.15s ease;
+  }
+  .stage.active { color: var(--text); border-bottom-color: var(--signal); }
+  .stage.done { color: var(--signal-deep); }
+  .stage .n {
+    opacity: 0.55;
+    margin-right: 7px;
+    font-size: 10px;
+  }
+  .stage.done .n::after { content: "✓"; margin-left: 5px; opacity: 0.8; }
+
+  /* ---------- Layout ---------- */
+  .layout {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 0;
+    min-height: calc(100vh - 102px);
+  }
+
+  .control-col {
+    border-right: 1px solid var(--line);
+    padding: 24px 22px 60px;
+    overflow-y: auto;
+    max-height: calc(100vh - 102px);
+  }
+
+  .panel {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 14px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0));
+    transition: border-color 0.15s ease;
+  }
+  .panel:hover { border-color: var(--line-strong); }
+  .panel h3 {
+    margin: 0 0 4px 0;
+    font-family: var(--display);
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel h3 .step-num {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--ink);
+    background: var(--signal);
+    width: 18px; height: 18px;
+    border-radius: 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .panel p.hint {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin: 4px 0 12px;
+    line-height: 1.5;
+  }
+
+  input[type=file], textarea, input[type=number], input[type=text] {
+    width: 100%;
+    padding: 9px 11px;
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    font-family: var(--sans);
+    font-size: 13px;
+    background: rgba(255,255,255,0.03);
+    color: var(--text);
+    margin-bottom: 9px;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  input::placeholder, textarea::placeholder { color: var(--text-faint); }
+  input[type=file]::file-selector-button {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text);
+    background: rgba(255,255,255,0.07);
+    border: 1px solid var(--line-strong);
+    border-radius: 5px;
+    padding: 5px 10px;
+    margin-right: 10px;
+    cursor: pointer;
+  }
+  input:focus, textarea:focus {
+    border-color: var(--signal);
+    background: rgba(94,234,212,0.04);
+    outline: none;
+  }
+  textarea { resize: vertical; min-height: 84px; font-family: var(--sans); }
+
+  button {
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--signal);
+    color: #08110d;
+    border: none;
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 11.5px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: transform 0.1s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+  button:hover { background: var(--signal-deep); box-shadow: 0 4px 16px rgba(94,234,212,0.18); }
+  button:active { transform: translateY(1px); }
+  button:disabled { background: rgba(255,255,255,0.08); color: var(--text-faint); cursor: not-allowed; box-shadow: none; }
+  button.secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--line-strong);
+  }
+  button.secondary:hover { background: rgba(255,255,255,0.05); box-shadow: none; color: var(--signal); border-color: var(--signal); }
+
+  .status-line {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--signal);
+    margin-top: 8px;
+    min-height: 14px;
+    line-height: 1.5;
+  }
+  .status-line.error { color: var(--warn); }
+  .status-line:empty { margin-top: 0; }
+
+  /* ---------- Main column ---------- */
+  .main-col {
+    padding: 28px 32px 60px;
+    overflow-x: auto;
+  }
+  .main-col .main-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .main-col h2 {
+    font-family: var(--display);
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    margin: 0;
+  }
+  .main-col .count-pill {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: rgba(255,255,255,0.015);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  th, td {
+    padding: 12px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--line);
+    font-size: 12.5px;
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-faint);
+    background: rgba(255,255,255,0.025);
+    position: sticky;
+    top: 0;
+    font-weight: 500;
+  }
+  tbody tr { transition: background 0.12s ease; }
+  tbody tr:hover { background: rgba(94,234,212,0.05); }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .rank {
+    font-family: var(--mono);
+    color: var(--text-faint);
+    width: 28px;
+    font-size: 12px;
+  }
+  td strong { font-weight: 600; color: var(--text); }
+  td .sub-email { color: var(--text-faint); font-size: 11px; display: block; margin-top: 2px; }
+
+  .score-pill {
+    font-family: var(--mono);
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    display: inline-block;
+    font-size: 12px;
+    border: 1px solid transparent;
+  }
+  .score-high { background: var(--signal-dim); color: var(--signal); border-color: rgba(94,234,212,0.25); }
+  .score-mid { background: var(--warn-dim); color: var(--warn); border-color: rgba(240,168,104,0.25); }
+  .score-low { background: rgba(255,255,255,0.05); color: var(--text-faint); border-color: var(--line); }
+
+  .breakdown-toggle {
+    cursor: pointer;
+    color: var(--signal);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    text-decoration: none;
+    border-bottom: 1px dotted var(--signal);
+    white-space: nowrap;
+  }
+  .breakdown-toggle:hover { color: var(--signal-deep); }
+  .breakdown-row { display: none; }
+  .breakdown-row.open { display: table-row; }
+  .breakdown-row td {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: rgba(255,255,255,0.02);
+    color: var(--text-dim);
+    padding: 12px 14px;
+  }
+
+  .status-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    background: rgba(255,255,255,0.06);
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+  .status-tag.qualified { background: var(--signal-dim); color: var(--signal); }
+  .status-tag.sent { background: var(--warn-dim); color: var(--warn); }
+
+  .empty-state {
+    padding: 80px 20px;
+    text-align: center;
+    color: var(--text-faint);
+    font-family: var(--mono);
+    font-size: 12px;
+    border: 1px dashed var(--line-strong);
+    border-radius: var(--radius);
+  }
+  .empty-state .glyph {
+    font-size: 22px;
+    margin-bottom: 10px;
+    color: var(--signal);
+    opacity: 0.7;
+  }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    .control-col {
+      border-right: none;
+      border-bottom: 1px solid var(--line);
+      max-height: none;
+    }
+    .topbar { padding: 16px 18px; flex-wrap: wrap; gap: 8px; }
+    .pipeline { padding: 0 18px; }
+    .main-col { padding: 22px 18px 40px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <span class="mark"></span>
+    VISL <span class="tag">Screen</span>
+  </div>
+  <div class="stage-label" id="stageLabel">STAGE 0 / 9 — AWAITING DATA</div>
+</div>
+
+<div class="pipeline" id="pipelineBar">
+  <div class="stage" data-stage="0"><span class="n">01</span>Upload Candidates</div>
+  <div class="stage" data-stage="1"><span class="n">02</span>Job Description</div>
+  <div class="stage" data-stage="2"><span class="n">03</span>Process Resumes</div>
+  <div class="stage" data-stage="3"><span class="n">04</span>GitHub Analysis</div>
+  <div class="stage" data-stage="4"><span class="n">05</span>Score &amp; Rank</div>
+  <div class="stage" data-stage="5"><span class="n">06</span>Email Test Links</div>
+  <div class="stage" data-stage="6"><span class="n">07</span>Upload Test Results</div>
+  <div class="stage" data-stage="7"><span class="n">08</span>Finalize Shortlist</div>
+  <div class="stage" data-stage="8"><span class="n">09</span>Schedule Interviews</div>
+</div>
+
+<div class="layout">
+  <div class="control-col">
+
+    <div class="panel">
+      <h3><span class="step-num">1</span>Candidate Dataset</h3>
+      <p class="hint">CSV with name, email, college, branch, cgpa, best_ai_project, research_work, github, resume.</p>
+      <input type="file" id="candidatesFile" accept=".csv" />
+      <button onclick="uploadCandidates()">Upload Candidates</button>
+      <div class="status-line" id="status-candidates"></div>
+    </div>
+
+    <div class="panel">
+      <h3><span class="step-num">2</span>Job Description</h3>
+      <p class="hint">Paste the JD text. Used for semantic relevance scoring.</p>
+      <textarea id="jdText" placeholder="Paste job description here..."></textarea>
+      <button onclick="setJD()">Save Job Description</button>
+      <div class="status-line" id="status-jd"></div>
+    </div>
+
+    <div class="panel">
+      <h3><span class="step-num">3</span>AI Evaluation</h3>
+      <p class="hint">Downloads resumes, analyzes GitHub repos, computes composite score.</p>
+      <button onclick="processResumes()">Process Resumes</button>
+      <div class="status-line" id="status-resumes"></div>
+      <button onclick="analyzeGithub()" style="margin-top:10px;">Analyze GitHub Profiles</button>
+      <div class="status-line" id="status-github"></div>
+      <button onclick="scoreCandidates()" style="margin-top:10px;">Score &amp; Rank Candidates</button>
+      <div class="status-line" id="status-score"></div>
+    </div>
+
+    <div class="panel">
+      <h3><span class="step-num">4</span>Shortlist &amp; Email</h3>
+      <p class="hint">Sends test links to top N candidates via your Gmail.</p>
+      <input type="number" id="topN" value="5" min="1" />
+      <button onclick="emailShortlist()">Send Test Links</button>
+      <div class="status-line" id="status-email"></div>
+    </div>
+
+    <div class="panel">
+      <h3><span class="step-num">5</span>Test Results</h3>
+      <p class="hint">CSV with s_no, test_la, test_code.</p>
+      <input type="file" id="testResultsFile" accept=".csv" />
+      <button onclick="uploadTestResults()">Upload Test Results</button>
+      <div class="status-line" id="status-testresults"></div>
+    </div>
+
+    <div class="panel">
+      <h3><span class="step-num">6</span>Finalize &amp; Schedule</h3>
+      <p class="hint">Threshold-based final shortlist, then real Calendar + Meet invites.</p>
+      <button class="secondary" onclick="finalizeShortlist()">Finalize Shortlist</button>
+      <div class="status-line" id="status-finalize"></div>
+      <button onclick="connectGoogle()" style="margin-top:10px;">Connect Google Calendar</button>
+      <button onclick="scheduleInterviews()" style="margin-top:10px;">Schedule Interviews</button>
+      <div class="status-line" id="status-schedule"></div>
+    </div>
+
+  </div>
+
+  <div class="main-col">
+    <div class="main-head">
+      <h2>Ranked Candidates</h2>
+      <span class="count-pill" id="countPill"></span>
+    </div>
+    <div id="tableWrap">
+      <div class="empty-state">
+        <div class="glyph">＋</div>
+        No candidates loaded yet. Upload a CSV to begin.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Set this to your deployed backend URL at build time, or override via
+// window.VISL_API_BASE before this script runs (e.g. injected by your host).
+const API =
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1"
+        ? "http://127.0.0.1:8000/api"
+        : "https://YOUR-RENDER-URL.onrender.com/api";
+
+function setStatus(id, msg, isError=false) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = "status-line" + (isError ? " error" : "");
+}
+
+function markStage(n) {
+  document.querySelectorAll(".stage").forEach(s => {
+    const idx = parseInt(s.dataset.stage);
+    s.classList.remove("active", "done");
+    if (idx < n) s.classList.add("done");
+    if (idx === n) s.classList.add("active");
+  });
+  const labels = ["AWAITING DATA","JD SET","RESUMES PROCESSED","GITHUB ANALYZED","SCORED & RANKED","TEST LINKS SENT","TEST RESULTS IN","SHORTLIST FINAL","INTERVIEWS SCHEDULED"];
+  document.getElementById("stageLabel").textContent = `STAGE ${n} / 9 — ${labels[n] || ""}`;
+}
+
+async function uploadCandidates() {
+  const file = document.getElementById("candidatesFile").files[0];
+  if (!file) { setStatus("status-candidates", "Choose a CSV first.", true); return; }
+  const fd = new FormData();
+  fd.append("file", file);
+  setStatus("status-candidates", "Uploading...");
+  try {
+    const res = await fetch(`${API}/upload-candidates`, { method: "POST", body: fd });
+    const data = await res.json();
+    setStatus("status-candidates", `Loaded ${data.candidates_loaded} candidates.`);
+    markStage(1);
+    loadCandidates();
+  } catch (e) { setStatus("status-candidates", "Failed: " + e, true); }
+}
+
+async function setJD() {
+  const text = document.getElementById("jdText").value;
+  if (!text.trim()) { setStatus("status-jd", "Paste a JD first.", true); return; }
+  const fd = new FormData();
+  fd.append("jd_text", text);
+  setStatus("status-jd", "Saving...");
+  try {
+    const res = await fetch(`${API}/job-description`, { method: "POST", body: fd });
+    await res.json();
+    setStatus("status-jd", "Job description saved.");
+    markStage(2);
+  } catch (e) { setStatus("status-jd", "Failed: " + e, true); }
+}
+
+async function processResumes() {
+  setStatus("status-resumes", "Downloading & extracting resumes... this can take a minute.");
+  try {
+    const res = await fetch(`${API}/process-resumes`, { method: "POST" });
+    const data = await res.json();
+    setStatus("status-resumes", `Processed: ${data.processed.success} ok, ${data.processed.failed} failed.`);
+    markStage(3);
+  } catch (e) { setStatus("status-resumes", "Failed: " + e, true); }
+}
+
+async function analyzeGithub() {
+  setStatus("status-github", "Fetching repo-level GitHub data...");
+  try {
+    const res = await fetch(`${API}/analyze-github`, { method: "POST" });
+    const data = await res.json();
+    setStatus("status-github", `Analyzed: ${data.analyzed.analyzed}, skipped: ${data.analyzed.skipped}.`);
+    markStage(4);
+  } catch (e) { setStatus("status-github", "Failed: " + e, true); }
+}
+
+async function scoreCandidates() {
+  setStatus("status-score", "Computing semantic JD match & composite scores...");
+  try {
+    const res = await fetch(`${API}/score-candidates`, { method: "POST" });
+    const data = await res.json();
+    setStatus("status-score", `Scored ${data.scored.scored} candidates.`);
+    markStage(5);
+    loadCandidates();
+  } catch (e) { setStatus("status-score", "Failed: " + e, true); }
+}
+
+async function emailShortlist() {
+  const topN = document.getElementById("topN").value;
+  const fd = new FormData();
+  fd.append("top_n", topN);
+  setStatus("status-email", "Sending emails...");
+  try {
+    const res = await fetch(`${API}/shortlist-and-email`, { method: "POST", body: fd });
+    const data = await res.json();
+    setStatus("status-email", `Sent: ${data.emailed.sent}, failed: ${data.emailed.failed}.`);
+    markStage(6);
+    loadCandidates();
+  } catch (e) { setStatus("status-email", "Failed: " + e, true); }
+}
+
+async function uploadTestResults() {
+  const file = document.getElementById("testResultsFile").files[0];
+  if (!file) { setStatus("status-testresults", "Choose a CSV first.", true); return; }
+  const fd = new FormData();
+  fd.append("file", file);
+  setStatus("status-testresults", "Uploading...");
+  try {
+    const res = await fetch(`${API}/upload-test-results`, { method: "POST", body: fd });
+    const data = await res.json();
+    setStatus("status-testresults", `Loaded ${data.results_loaded} results.`);
+    markStage(7);
+    loadCandidates();
+  } catch (e) { setStatus("status-testresults", "Failed: " + e, true); }
+}
+
+async function finalizeShortlist() {
+  const fd = new FormData();
+  fd.append("test_la_min", 50);
+  fd.append("test_code_min", 60);
+  setStatus("status-finalize", "Finalizing...");
+  try {
+    const res = await fetch(`${API}/finalize-shortlist`, { method: "POST", body: fd });
+    const data = await res.json();
+    setStatus("status-finalize", `Qualified: ${data.qualified.length} candidates.`);
+    markStage(8);
+    loadCandidates();
+  } catch (e) { setStatus("status-finalize", "Failed: " + e, true); }
+}
+
+async function connectGoogle() {
+  setStatus("status-schedule", "Opening Google sign-in...");
+  try {
+    const res = await fetch(`${API}/google/auth-url`);
+    const data = await res.json();
+    window.open(data.auth_url, "_blank");
+    setStatus("status-schedule", "Complete sign-in in the new tab, then click Schedule Interviews.");
+  } catch (e) { setStatus("status-schedule", "Failed: " + e, true); }
+}
+
+async function scheduleInterviews() {
+  const fd = new FormData();
+  fd.append("start_hour", 11);
+  setStatus("status-schedule", "Creating calendar events with Meet links...");
+  try {
+    const res = await fetch(`${API}/schedule-interviews`, { method: "POST", body: fd });
+    const data = await res.json();
+    const ok = data.scheduled.filter(s => s.status === "scheduled").length;
+    setStatus("status-schedule", `Scheduled ${ok}/${data.scheduled.length} interviews.`);
+    markStage(9);
+  } catch (e) { setStatus("status-schedule", "Failed: " + e, true); }
+}
+
+function scoreClass(score) {
+  if (score >= 65) return "score-high";
+  if (score >= 45) return "score-mid";
+  return "score-low";
+}
+
+function statusTagClass(status) {
+  if (status === "interview_ready") return "qualified";
+  if (status === "test_sent") return "sent";
+  return "";
+}
+
+async function loadCandidates() {
+  try {
+    const res = await fetch(`${API}/candidates`);
+    const rows = await res.json();
+    const countPill = document.getElementById("countPill");
+    if (!rows.length) {
+      countPill.textContent = "";
+      return;
+    }
+    countPill.textContent = `${rows.length} candidate${rows.length === 1 ? "" : "s"}`;
+
+    let html = `<table><thead><tr>
+      <th>#</th><th>Name</th><th>College</th><th>Final Score</th>
+      <th>JD</th><th>GitHub</th><th>CGPA</th><th>Test</th><th>Status</th><th></th>
+    </tr></thead><tbody>`;
+
+    rows.forEach((r, i) => {
+      const finalScore = r.final_score != null ? r.final_score.toFixed(1) : "—";
+      html += `<tr>
+        <td class="rank">${i+1}</td>
+        <td><strong>${r.name}</strong><span class="sub-email">${r.email}</span></td>
+        <td>${r.college || ""}</td>
+        <td><span class="score-pill ${scoreClass(r.final_score || 0)}">${finalScore}</span></td>
+        <td>${r.jd_score != null ? r.jd_score.toFixed(1) : "—"}</td>
+        <td>${r.github_score != null ? r.github_score.toFixed(1) : "—"}</td>
+        <td>${r.cgpa ?? "—"}</td>
+        <td>${r.test_la != null ? r.test_la + "/" + r.test_code : "—"}</td>
+        <td><span class="status-tag ${statusTagClass(r.status)}">${(r.status||"").replace(/_/g," ")}</span></td>
+        <td><span class="breakdown-toggle" onclick="toggleBreak(${i})">details</span></td>
+      </tr>
+      <tr class="breakdown-row" id="break-${i}">
+        <td colspan="10">${r.score_breakdown ? formatBreakdown(r.score_breakdown) : "No score breakdown yet."}</td>
+      </tr>`;
+    });
+
+    html += "</tbody></table>";
+    document.getElementById("tableWrap").innerHTML = html;
+  } catch (e) { console.error(e); }
+}
+
+function formatBreakdown(json) {
+  try {
+    const b = JSON.parse(json);
+    return Object.entries(b)
+      .filter(([k]) => k !== "final_score")
+      .map(([k, v]) => `${k}: ${v.score} × ${v.weight}`)
+      .join("  |  ");
+  } catch (e) { return json; }
+}
+
+function toggleBreak(i) {
+  document.getElementById(`break-${i}`).classList.toggle("open");
+}
+
+markStage(0);
+loadCandidates();
+</script>
+
+</body>
+</html>
