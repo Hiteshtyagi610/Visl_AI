@@ -1,18 +1,3 @@
-"""
-AI Evaluation & Scoring Engine.
-
-JD-relevance is computed using a local, open-source sentence embedding model
-(all-MiniLM-L6-v2 via sentence-transformers) — NOT a paid LLM API call. This
-is a deliberate choice: it's free, fast, runs offline, and is exactly the
-kind of "open-source AI framework" the assignment asks for. We embed the
-job description once, then embed each candidate's (resume text + best AI
-project + research work) and compute cosine similarity.
-
-Final score is a transparent weighted formula, stored per-candidate as a
-breakdown dict — this is what gives "explainable AI scoring" (bonus point):
-nothing is a black box, every number traces back to a visible sub-score.
-"""
-
 import json
 from sentence_transformers import SentenceTransformer, util
 
@@ -28,12 +13,11 @@ def _get_model():
     return _model
 
 
-def _jd_similarity_score(jd_text: str, candidate_text: str) -> float:
+def _jd_similarity_score(jd_embedding, candidate_text: str, model) -> float:
     if not candidate_text or not candidate_text.strip():
         return 0.0
-    model = _get_model()
-    embeddings = model.encode([jd_text, candidate_text], convert_to_tensor=True)
-    sim = util.cos_sim(embeddings[0], embeddings[1]).item()
+    cand_embedding = model.encode(candidate_text, convert_to_tensor=True)
+    sim = util.cos_sim(jd_embedding, cand_embedding).item()
     # cosine sim is -1..1, in practice for related text it's ~0.1-0.7; rescale to 0-100
     return round(max(0, min(sim, 1)) * 100, 2)
 
@@ -73,10 +57,13 @@ def score_all_candidates() -> dict:
         "SELECT s_no, resume_text, best_ai_project, research_work, cgpa, github_score, test_la, test_code FROM candidates"
     ).fetchall()
 
+    model = _get_model()
+    jd_embedding = model.encode(jd_text, convert_to_tensor=True)
+
     scored = 0
     for s_no, resume_text, best_project, research, cgpa, github_score, test_la, test_code in candidates:
         candidate_blob = " ".join(filter(None, [resume_text, best_project, research]))
-        jd_score = _jd_similarity_score(jd_text, candidate_blob)
+        jd_score = _jd_similarity_score(jd_embedding, candidate_blob, model)
         cgpa_sc = _cgpa_score(cgpa)
         test_sc = _test_score(test_la, test_code)
         gh_score = github_score if github_score is not None else 0.0
