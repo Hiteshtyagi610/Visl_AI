@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from db import init_db, get_conn, DB_PATH
+from db import init_db, get_conn, clear_session
 from ingest import ingest_candidates_csv, ingest_test_results_csv
 from resume_processor import process_all_resumes
 from github_analyzer import analyze_all_github_profiles
@@ -49,17 +49,7 @@ init_db()
 async def upload_candidates(file: UploadFile = File(...)):
     """Recruiter uploads a CSV of candidate info. Stored fresh each run."""
 
-    # Clear previous screening session
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-
-    cur.execute("DELETE FROM candidates")
-
-    # Optional: reset auto-increment IDs
-    cur.execute("DELETE FROM sqlite_sequence WHERE name='candidates'")
-
-    conn.commit()
-    conn.close()
+    clear_session()
 
     # Save uploaded CSV
     path = os.path.join(UPLOAD_DIR, "candidates.csv")
